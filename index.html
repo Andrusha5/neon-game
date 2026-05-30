@@ -151,16 +151,18 @@ canvas.width = window.innerWidth;
             updateTargetPos(touch.clientX, touch.clientY);
         }, { passive: true });
 
-        function updateTargetPos(screenX, screenY) {
-            let myPlayer = players[myId];
-            if (!myPlayer) return;
-            
-            let cameraX = canvas.width / 2 - myPlayer.x;
-            let cameraY = canvas.height / 2 - myPlayer.y;
+       function updateTargetPos(screenX, screenY) {
+    let myPlayer = players[myId];
+    if (!myPlayer) return;
+    
+    // Рассчитываем текущий зум так же, как в функции draw
+    let zoom = Math.pow(15 / myPlayer.size, 0.4); 
+    if (zoom < 0.4) zoom = 0.4; // Ограничение, чтобы не отдалялось слишком сильно
 
-            targetX = screenX - cameraX;
-            targetY = screenY - cameraY;
-        }
+    // Учитываем зум при расчете цели
+    targetX = myPlayer.x + (screenX - canvas.width / 2) / zoom;
+    targetY = myPlayer.y + (screenY - canvas.height / 2) / zoom;
+}
 
         function amIHost() {
             if (!players || Object.keys(players).length === 0) return false;
@@ -434,97 +436,103 @@ let minDist = Infinity;
 
         // --- Отрисовка графики ---
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            if (!myId || !players[myId]) {
-                requestAnimationFrame(draw);
-                return;
-            }
+    if (!myId || !players[myId]) {
+        requestAnimationFrame(draw);
+        return;
+    }
 
-            let myPlayer = players[myId];
-            document.getElementById('score-display').innerText = "Очки: " + myPlayer.score;
+    let myPlayer = players[myId];
+    document.getElementById('score-display').innerText = "Очки: " + myPlayer.score;
 
-            let cameraX = canvas.width / 2 - myPlayer.x;
-            let cameraY = canvas.height / 2 - myPlayer.y;
+    // РАССЧИТЫВАЕМ ЗУМ (чем больше размер, тем меньше значение zoom)
+    // Используем Math.pow для более плавного изменения
+    let zoom = Math.pow(15 / myPlayer.size, 0.4); 
+    if (zoom < 0.4) zoom = 0.4; // Максимальное отдаление
 
-            ctx.save();
-            ctx.translate(cameraX, cameraY);
+    ctx.save();
 
-            // Сетка
-            ctx.strokeStyle = '#111124';
-            ctx.lineWidth = 1;
-            for (let x = 0; x <= MAP_WIDTH; x += 40) {
-                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_HEIGHT); ctx.stroke();
-            }
-            for (let y = 0; y <= MAP_HEIGHT; y += 40) {
-                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_WIDTH, y); ctx.stroke();
-            }
+    // 1. Сначала двигаем центр координат в центр экрана
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    
+    // 2. Применяем масштабирование (отдаление)
+    ctx.scale(zoom, zoom);
+    
+    // 3. Сдвигаем мир так, чтобы наш игрок был в центре
+    ctx.translate(-myPlayer.x, -myPlayer.y);
 
-            // Граница
-            ctx.strokeStyle = '#ff0055';
-            ctx.lineWidth = 6;
-            ctx.strokeRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+    // --- Дальше рисуем всё как обычно ---
 
-            // Еда
-            for (let foodId in food) {
-                let f = food[foodId];
-                ctx.shadowBlur = 8;
-                ctx.shadowColor = f.color;
-                ctx.fillStyle = f.color;
-                ctx.beginPath();
-                ctx.arc(f.x, f.y, 5, 0, Math.PI * 2);
-                ctx.fill();
-            }
+    // Сетка
+    ctx.strokeStyle = '#111124';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= MAP_WIDTH; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_HEIGHT); ctx.stroke();
+    }
+    for (let y = 0; y <= MAP_HEIGHT; y += 40) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_WIDTH, y); ctx.stroke();
+    }
 
-            // Боты
-            for (let id in bots) {
-                let b = bots[id];
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = b.color;
-                ctx.fillStyle = b.color;
+    // Граница арены
+    ctx.strokeStyle = '#ff0055';
+    ctx.lineWidth = 6 / zoom; // Толщина линии подстраивается под зум
+    ctx.strokeRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-                ctx.beginPath();
-                ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
-                ctx.fill();
+    // Еда
+    for (let foodId in food) {
+        let f = food[foodId];
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = f.color;
+        ctx.fillStyle = f.color;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 5, 0, Math.PI * 2);
+        ctx.fill();
+    }
 
-                ctx.strokeStyle = '#999';
-                ctx.lineWidth = 2;
-                ctx.stroke();
+    // Боты
+    for (let id in bots) {
+        let b = bots[id];
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = b.color;
+        ctx.fillStyle = b.color;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#999';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffeb3b';
+        ctx.font = `italic bold ${13 / zoom}px sans-serif`; // Размер текста подстраивается
+        ctx.textAlign = 'center';
+        ctx.fillText("[Бот] " + b.name, b.x, b.y - b.size - 8 / zoom);
+    }
 
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = '#ffeb3b';
-                ctx.font = 'italic bold 13px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText("[Бот] " + b.name, b.x, b.y - b.size - 8);
-            }
+    // Игроки
+    for (let id in players) {
+        let p = players[id];
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = p.color;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${14 / zoom}px sans-serif`; // Размер текста подстраивается
+        ctx.textAlign = 'center';
+        ctx.fillText(p.name, p.x, p.y - p.size - 8 / zoom);
+    }
 
-            // Реальные игроки
-            for (let id in players) {
-                let p = players[id];
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = p.color;
-                ctx.fillStyle = p.color;
+    ctx.restore(); // Возвращаем обычное состояние холста
 
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-
-                ctx.shadowBlur = 0;
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 14px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(p.name, p.x, p.y - p.size - 8);
-            }
-
-            ctx.restore();
-
-            updateLeaderboard();
-            requestAnimationFrame(draw);
-        }
+    updateLeaderboard();
+    requestAnimationFrame(draw);
+}
 
         function updateLeaderboard() {
             const leaderList = document.getElementById('leader-list');
