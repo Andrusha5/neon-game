@@ -77,21 +77,22 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui">
-        <div id="login-box">
-            <h1>NEON ARENA</h1>
-            <input type="text" id="nickname" placeholder="Твой никнейм" maxlength="12">
-            
+    <div id="login-box">
+        <h1>NEON ARENA</h1>
+        <input type="text" id="nickname" placeholder="Твой никнейм" maxlength="12">
+        
 
-            <button onclick="startGame()">ИГРАТЬ</button>
-        </div>
-
-        <div id="leaderboard">
-            <h3>ТОП ИГРОКОВ</h3>
-            <div id="leader-list"></div>
-        </div>
-
-        <div id="score-display">Очки: 0</div>
+        <button onclick="startGame()">ИГРАТЬ</button>
     </div>
+
+    <!-- ПРОВЕРЬТЕ ЭТОТ БЛОК: -->
+    <div id="leaderboard">
+        <h3>ТОП ИГРОКОВ</h3>
+        <div id="leader-list"></div> <!-- Эта строчка должна быть здесь! -->
+    </div>
+
+    <div id="score-display">Очки: 0</div>
+</div>
 
     <!-- Подключаем Firebase SDK (Совместимая версия для простой работы без сборщиков) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -367,14 +368,17 @@ ctx.lineWidth = 6;
             requestAnimationFrame(draw);
         }
 
-        function updateLeaderboard() {
-            let sorted = Object.values(players).sort((a,b) => b.score - a.score).slice(0, 5);
-            let listHTML = "";
-            sorted.forEach((p, index) => {
-                listHTML += `<div class="leader-row"><span>${index+1}. ${p.name}</span><b>${p.score}</b></div>`;
-            });
-            document.getElementById('lea der-list').innerHTML = listHTML;
-        }
+       function updateLeaderboard() {
+    const leaderList = document.getElementById('leader-list');
+    if (!leaderList) return; // <-- Если элемента нет на странице, игра НЕ ломается и идет дальше
+
+    let sorted = Object.values(players).sort((a,b) => b.score - a.score).slice(0, 5);
+    let listHTML = "";
+    sorted.forEach((p, index) => {
+        listHTML += `<div class="leader-row"><span>${index+1}. ${p.name}</span><b>${p.score}</b></div>`;
+    });
+    leaderList.innerHTML = listHTML;
+}
 
         draw();
     </script>
