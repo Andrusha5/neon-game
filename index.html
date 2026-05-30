@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Arena Firebase</title>
+    <title>Neon Arena Firebase with Bots</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #07070c; font-family: sans-serif; }
@@ -21,7 +21,6 @@
             pointer-events: none;
         }
 
-        /* Окно входа */
         #login-box {
             position: absolute;
             top: 50%; left: 50%;
@@ -48,7 +47,6 @@
         }
         #login-box button:hover { transform: scale(1.05); }
 
-        /* Таблица лидеров */
         #leaderboard {
             position: absolute;
             top: 15px; right: 15px;
@@ -58,12 +56,14 @@
             border-radius: 10px;
             padding: 12px;
             color: #fff;
-            width: 200px;
+            width: 220px;
             font-size: 0.9rem;
         }
-        #leaderboard h3 { color: #ff007f; text-align: center; margin-bottom: 8px; text-shadow: 0 0 5px #ff007f; } .leader-row { display: flex; justify-content: space-between; margin: 4px 0; }
+        #leaderboard h3 { color: #ff007f; text-align: center; margin-bottom: 8px; text-shadow: 0 0 5px #ff007f; }
+        .leader-row { display: flex; justify-content: space-between; margin: 4px 0; }
 
-        #score-display {
+
+#score-display {
             position: absolute;
             bottom: 20px; left: 20px;
             color: #fff; font-size: 1.4rem; font-weight: bold;
@@ -77,30 +77,28 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui">
-    <div id="login-box">
-        <h1>NEON ARENA</h1>
-        <input type="text" id="nickname" placeholder="Твой никнейм" maxlength="12">
-        
+        <div id="login-box">
+            <h1>NEON ARENA</h1>
+            <input type="text" id="nickname" placeholder="Твой никнейм" maxlength="12">
+            
 
-        <button onclick="startGame()">ИГРАТЬ</button>
+            <button onclick="startGame()">ИГРАТЬ</button>
+        </div>
+
+        <div id="leaderboard">
+            <h3>ТОП ИГРОКОВ</h3>
+            <div id="leader-list"></div>
+        </div>
+
+        <div id="score-display">Очки: 0</div>
     </div>
 
-    <!-- ПРОВЕРЬТЕ ЭТОТ БЛОК: -->
-    <div id="leaderboard">
-        <h3>ТОП ИГРОКОВ</h3>
-        <div id="leader-list"></div> <!-- Эта строчка должна быть здесь! -->
-    </div>
-
-    <div id="score-display">Очки: 0</div>
-</div>
-
-    <!-- Подключаем Firebase SDK (Совместимая версия для простой работы без сборщиков) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
     <script>
         // === НАСТРОЙКИ FIREBASE (ВСТАВЬТЕ СВОИ ДАННЫЕ СЮДА) ===
-        const firebaseConfig = {
+       const firebaseConfig = {
   apiKey: "AIzaSyA_I6GdjufbLIhUDRd0YrE7K6Qx0SopUtI",
   authDomain: "neon-game-22bfa.firebaseapp.com",
   databaseURL: "https://neon-game-22bfa-default-rtdb.europe-west1.firebasedatabase.app",
@@ -110,36 +108,38 @@
   appId: "1:1002898467079:web:7a340e6bdb06e2a7e73da2",
   measurementId: "G-GEDJXB5F19"
 };
-      
         // ======================================================
 
-        // Инициализация Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        const MAP_WIDTH = 1200;
-        const MAP_HEIGHT = 800;
+        // 1. УВЕЛИЧИЛИ РАЗМЕР ИГРОВОГО ПОЛЯ
+        const MAP_WIDTH = 2400;
+        const MAP_HEIGHT = 1600;
 
         let players = {};
         let food = {};
+        let bots = {}; // Здесь будут храниться боты
         let myId = null;
         let myPlayerRef = null;
         let gameActive = false;
-        let targetX = 600;
-        let targetY = 400; // Генерация случайного цвета в формате HSL (яркий неон)
+        let targetX = 1200;
+        let targetY = 800;
+
         const randomColor = `hsl(${Math.random() * 360}, 100%, 60%)`;
 
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
+
+
+canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // Считывание движений
         window.addEventListener('mousemove', (e) => {
             if (!gameActive || !myId) return;
             updateTargetPos(e.clientX, e.clientY);
@@ -162,17 +162,23 @@
             targetY = screenY - cameraY;
         }
 
-        // --- Старт игры ---
+        // Функция проверки: является ли данный игрок Хостом
+        function amIHost() {
+            if (!players || Object.keys(players).length === 0) return false;
+            const sortedIds = Object.keys(players).sort();
+            return sortedIds[0] === myId;
+        }
+
         function startGame() {
             let nick = document.getElementById('nickname').value.trim() || 'Игрок';
             document.getElementById('login-box').style.display = 'none';
 
-            // Создаем уникальную запись игрока в базе
             myPlayerRef = database.ref('players').push();
-            myId = myPlayerRef.key; const startX = Math.random() * (MAP_WIDTH - 100) + 50;
-            const startY = Math.random() * (MAP_HEIGHT - 100) + 50;
+            myId = myPlayerRef.key;
 
-            // Записываем данные в Firebase
+            const startX = Math.random() * (MAP_WIDTH - 150) + 75;
+            const startY = Math.random() * (MAP_HEIGHT - 150) + 75;
+
             myPlayerRef.set({
                 id: myId,
                 name: nick,
@@ -183,23 +189,28 @@
                 color: randomColor
             });
 
-            // КРИТИЧЕСКИ ВАЖНО: Если игрок закроет вкладку/телефон, Firebase автоматически удалит его из игры
             myPlayerRef.onDisconnect().remove();
-
             gameActive = true;
             
-            // Если еды в базе нет, создаем её (только первый зашедший игрок инициализирует еду)
+            // Если еды нет, создаем
             database.ref('food').once('value', (snapshot) => {
                 if (!snapshot.exists()) {
                     generateAllFood();
                 }
             });
+
+            // Если ботов нет, создаем
+            database.ref('bots').once('value', (snapshot) => {
+                if (!snapshot.exists()) {
+                    generateBots();
+                }
+            });
         }
 
-        // Генерация еды
+        // 2. УВЕЛИЧИЛИ КОЛИЧЕСТВО ЕДЫ ДО 150
         function generateAllFood() {
             let initialFood = {};
-            for (let i = 0; i < 50; i++) {
+            for (let i = 0; i < 150; i++) {
                 initialFood['food_' + i] = {
                     x: Math.random() * (MAP_WIDTH - 40) + 20,
                     y: Math.random() * (MAP_HEIGHT - 40) + 20,
@@ -209,19 +220,104 @@
             database.ref('food').set(initialFood);
         }
 
-        // --- Слушатели Firebase ---
+        // 3. ДОБАВЛЕНИЕ БОТОВ С РАЗНЫМИ РАЗМЕРАМИ
+        function generateBots() {
+            let initialBots = {};
+            const botNames = ["Киборг", "Неон-Монстр", "Альфа", "Флеш", "Глюк", "Вектор", "Шериф", "Звезда"];
+            for (let i = 0; i < 8; i++) {
+                // Случайный размер от 12 до 40
+                const bSize = Math.floor(Math.random() * 28) + 12;
+                initialBots['bot_' + i] = {
+                    id: 'bot_' + i,
+                    name: botNames[i],
+                    x: Math.random() * (MAP_WIDTH - 100) + 50,
+                    y: Math.random() * (MAP_HEIGHT - 100) + 50,
+                    size: bSize,
+                    score: Math.floor((bSize - 15) * 2), // Очки зависят от размера
+                    color: `hsl(${Math.random() * 360}, 100%, 40%)`,
+                    targetX: Math.random() * MAP_WIDTH,
+                    targetY: Math.random() * MAP_HEIGHT
+                };
+            }
+            database.ref('bots').set(initialBots);
+        }
 
-        // Следим за изменениями игроков
+        // --- Слушатели Firebase ---
         database.ref('players').on('value', (snapshot) => {
             players = snapshot.val() || {};
         });
 
-        // Следим за изменениями еды
         database.ref('food').on('value', (snapshot) => {
             food = snapshot.val() || {};
         });
 
-        // Движение нашего игрока и отправка координат в Firebase (60 раз в секунду)
+        database.ref('bots').on('value', (snapshot) => {
+            bots = snapshot.val() || {};
+        });
+
+        // Движение ботов (Искусственный Интеллект) — выполняет только Хост!
+        function updateBotsAI() {
+            for (let botId in bots) {
+                let b = bots[botId];
+                
+                // Ищем ближайшую еду для бота
+                let nearestFood = null;
+                let minDist = Infinity;
+                for (let fId in food) {
+                    let f = food[fId];
+                    let d = Math.hypot(b.x - f.x, b.y - f.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearestFood = f;
+                    }
+                }
+
+                // Идем к еде, либо к случайной точке
+                let tx = nearestFood ? nearestFood.x : b.targetX;
+                let ty = nearestFood ? nearestFood.y : b.targetY;
+
+                let dx = tx - b.x;
+                let dy = ty - b.y;
+                let dist = Math.hypot(dx, dy);
+
+
+if (dist > 5) {
+                    let speed = 2.5; // Боты ходят чуть медленнее игроков
+                    let newX = b.x + (dx / dist) * speed;
+                    let newY = b.y + (dy / dist) * speed;
+
+                    newX = Math.max(15, Math.min(MAP_WIDTH - 15, newX));
+                    newY = Math.max(15, Math.min(MAP_HEIGHT - 15, newY));
+
+                    database.ref('bots/' + botId).update({ x: newX, y: newY });
+                } else if (!nearestFood) {
+                    // Если еды нет и пришли в точку, выбираем новую
+                    database.ref('bots/' + botId).update({
+                        targetX: Math.random() * MAP_WIDTH,
+                        targetY: Math.random() * MAP_HEIGHT
+                    });
+                }
+
+                // Проверяем: кушает ли бот еду
+                for (let fId in food) {
+                    let f = food[fId];
+                    let distToFood = Math.hypot(b.x - f.x, b.y - f.y);
+                    if (distToFood < b.size + 4) {
+                        let newScore = (b.score || 0) + 1;
+                        let newSize = 15 + Math.floor(newScore / 2);
+                        database.ref('bots/' + botId).update({ score: newScore, size: newSize });
+
+                        database.ref('food/' + fId).set({
+                            x: Math.random() * (MAP_WIDTH - 40) + 20,
+                            y: Math.random() * (MAP_HEIGHT - 40) + 20,
+                            color: `hsl(${Math.random() * 360}, 100%, 50%)`
+                        });
+                    }
+                }
+            }
+        }
+
+        // Основной цикл расчетов
         setInterval(() => {
             if (!gameActive || !myId || !players[myId]) return;
 
@@ -235,31 +331,25 @@
                 let newX = myPlayer.x + (dx / dist) * speed;
                 let newY = myPlayer.y + (dy / dist) * speed;
 
-                // Границы
                 newX = Math.max(15, Math.min(MAP_WIDTH - 15, newX));
                 newY = Math.max(15, Math.min(MAP_HEIGHT - 15, newY));
 
-                // Обновляем позицию локально для плавности
                 players[myId].x = newX;
                 players[myId].y = newY;
 
-                // Отправляем в Firebase
                 myPlayerRef.update({ x: newX, y: newY });
             }
 
-            // Проверяем поедание точек еды
-            for (let foodId in food) {
-                let f = food[foodId];
+            // Игрок кушает еду
+            for (let fId in food) {
+                let f = food[fId];
                 let distToFood = Math.hypot(myPlayer.x - f.x, myPlayer.y - f.y);
                 if (distToFood < myPlayer.size + 4) {
-                    
-                    // Обновляем счет и размер игрока
                     let newScore = myPlayer.score + 1;
                     let newSize = 15 + Math.floor(newScore / 2);
                     myPlayerRef.update({ score: newScore, size: newSize });
 
-                    // Перемещаем съеденную еду в другое место в Firebase
-                    database.ref('food/' + foodId).set({
+                    database.ref('food/' + fId).set({
                         x: Math.random() * (MAP_WIDTH - 40) + 20,
                         y: Math.random() * (MAP_HEIGHT - 40) + 20,
                         color: `hsl(${Math.random() * 360}, 100%, 50%)`
@@ -267,19 +357,55 @@
                 }
             }
 
-            // Проверяем столкновение с другими игроками
+            // Столкновение между Игроком и Ботами (игрок ест бота или бот ест игрока)
+            for (let botId in bots) {
+                let b = bots[botId];
+                let distToBot = Math.hypot(myPlayer.x - b.x, myPlayer.y - b.y);
+
+                if (distToBot < myPlayer.size + b.size * 0.5) {
+                    // 1. ИГРОК СЪЕДАЕТ БОТА
+                    if (myPlayer.size > b.size * 1.15) {
+                        let newScore = myPlayer.score + Math.floor((b.score || 0) / 2) + 5;
+                        myPlayerRef.update({ score: newScore, size: 15 + Math.floor(newScore / 2) });
+
+                        // Возрождаем бота с новым случайным размером
+                        const bSize = Math.floor(Math.random() * 25) + 12;
+                        database.ref('bots/' + botId).update({
+                            x: Math.random() * (MAP_WIDTH - 100) + 50,
+                            y: Math.random() * (MAP_HEIGHT - 100) + 50,
+                            size: bSize,
+                            score: Math.floor((bSize - 15) * 2)
+                        });
+                    } 
+                    // 2. БОТ СЪЕДАЕТ ИГРОКА
+                    else if (b.size > myPlayer.size * 1.15) {
+                        let newBotScore = (b.score || 0) + Math.floor(myPlayer.score / 2) + 5;
+                        database.ref('bots/' + botId).update({
+                            score: newBotScore,
+                            size: 15 + Math.floor(newBotScore / 2)
+                        });
+
+                        // Наш игрок сбрасывается и возрождается в новом месте
+                        myPlayerRef.update({
+                            x: Math.random() * (MAP_WIDTH - 100) + 50,
+                            y: Math.random() * (MAP_HEIGHT - 100) + 50,
+                            score: 0,
+                            size: 15
+                        });
+                    }
+                }
+            }
+
+            // Столкновения игроков друг с другом
             for (let otherId in players) {
                 if (otherId !== myId) {
                     let other = players[otherId];
                     let distToPlayer = Math.hypot(myPlayer.x - other.x, myPlayer.y - other.y);
 
-                    // Если мы больше другого игрока и съели его
                     if (distToPlayer < myPlayer.size && myPlayer.size > other.size * 1.15) {
-                        // Начисляем очки нам
                         let newScore = myPlayer.score + Math.floor(other.score / 2) + 5;
                         myPlayerRef.update({ score: newScore, size: 15 + Math.floor(newScore / 2) });
 
-                        // Обнуляем съеденного игрока в Firebase
                         database.ref('players/' + otherId).update({
                             x: Math.random() * (MAP_WIDTH - 100) + 50,
                             y: Math.random() * (MAP_HEIGHT - 100) + 50,
@@ -288,6 +414,11 @@
                         });
                     }
                 }
+            }
+
+            // Если я хост, я управляю ботами
+            if (amIHost()) {
+                updateBotsAI();
             }
 
         }, 1000 / 60);
@@ -304,7 +435,6 @@
             let myPlayer = players[myId];
             document.getElementById('score-display').innerText = "Очки: " + myPlayer.score;
 
-            // Камера центрируется на нашем шаре
             let cameraX = canvas.width / 2 - myPlayer.x;
             let cameraY = canvas.height / 2 - myPlayer.y;
 
@@ -323,9 +453,7 @@
 
             // Граница арены
             ctx.strokeStyle = '#ff0055';
-
-
-ctx.lineWidth = 6;
+            ctx.lineWidth = 6;
             ctx.strokeRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
             // Рисуем еду
@@ -339,7 +467,30 @@ ctx.lineWidth = 6;
                 ctx.fill();
             }
 
-            // Рисуем всех игроков
+            // РИСУЕМ БОТОВ
+            for (let id in bots) {
+                let b = bots[id];
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = b.color;
+                ctx.fillStyle = b.color;
+
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Имя бота (желтым цветом)
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffeb3b';
+                ctx.font = 'italic bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText("[Бот] " + b.name, b.x, b.y - b.size - 8);
+            }
+
+            // Рисуем реальных игроков
             for (let id in players) {
                 let p = players[id];
                 ctx.shadowBlur = 15;
@@ -368,17 +519,24 @@ ctx.lineWidth = 6;
             requestAnimationFrame(draw);
         }
 
-       function updateLeaderboard() {
-    const leaderList = document.getElementById('leader-list');
-    if (!leaderList) return; // <-- Если элемента нет на странице, игра НЕ ломается и идет дальше
+        // Общая таблица лидеров (Игроки + Боты)
+        function updateLeaderboard() {
+            const leaderList = document.getElementById('leader-list');
+            if (!leaderList) return;
 
-    let sorted = Object.values(players).sort((a,b) => b.score - a.score).slice(0, 5);
-    let listHTML = "";
-    sorted.forEach((p, index) => {
-        listHTML += `<div class="leader-row"><span>${index+1}. ${p.name}</span><b>${p.score}</b></div>`;
-    });
-    leaderList.innerHTML = listHTML;
-}
+            // Сливаем игроков и ботов в единый массив для сортировки
+            let list = [
+                ...Object.values(players),
+                ...Object.values(bots).map(b => ({ ...b, name: "[Бот] " + b.name }))
+            ];
+
+            let sorted = list.sort((a,b) => b.score - a.score).slice(0, 5);
+            let listHTML = "";
+            sorted.forEach((p, index) => {
+                listHTML += `<div class="leader-row"><span>${index+1}. ${p.name}</span><b>${p.score}</b></div>`;
+            });
+            leaderList.innerHTML = listHTML;
+        }
 
         draw();
     </script>
