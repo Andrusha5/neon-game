@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Arena Firebase with Bots</title>
+    <title>Neon Arena Firebase with Menu on Death</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #07070c; font-family: sans-serif; }
@@ -60,10 +60,11 @@
             font-size: 0.9rem;
         }
         #leaderboard h3 { color: #ff007f; text-align: center; margin-bottom: 8px; text-shadow: 0 0 5px #ff007f; }
-        .leader-row { display: flex; justify-content: space-between; margin: 4px 0; }
 
 
-#score-display {
+.leader-row { display: flex; justify-content: space-between; margin: 4px 0; }
+
+        #score-display {
             position: absolute;
             bottom: 20px; left: 20px;
             color: #fff; font-size: 1.4rem; font-weight: bold;
@@ -98,7 +99,7 @@
 
     <script>
         // === НАСТРОЙКИ FIREBASE (ВСТАВЬТЕ СВОИ ДАННЫЕ СЮДА) ===
-       const firebaseConfig = {
+        const firebaseConfig = {
   apiKey: "AIzaSyA_I6GdjufbLIhUDRd0YrE7K6Qx0SopUtI",
   authDomain: "neon-game-22bfa.firebaseapp.com",
   databaseURL: "https://neon-game-22bfa-default-rtdb.europe-west1.firebasedatabase.app",
@@ -116,13 +117,12 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // 1. УВЕЛИЧИЛИ РАЗМЕР ИГРОВОГО ПОЛЯ
         const MAP_WIDTH = 2400;
         const MAP_HEIGHT = 1600;
 
         let players = {};
         let food = {};
-        let bots = {}; // Здесь будут храниться боты
+        let bots = {}; 
         let myId = null;
         let myPlayerRef = null;
         let gameActive = false;
@@ -162,11 +162,31 @@ canvas.width = window.innerWidth;
             targetY = screenY - cameraY;
         }
 
-        // Функция проверки: является ли данный игрок Хостом
         function amIHost() {
             if (!players || Object.keys(players).length === 0) return false;
             const sortedIds = Object.keys(players).sort();
             return sortedIds[0] === myId;
+        }
+
+        // Функция завершения игры (выход в меню)
+        function gameOver(reason) {
+            gameActive = false;
+            
+            // Отключаем слушатель удаления
+            if (myPlayerRef) {
+                myPlayerRef.off();
+                myPlayerRef.remove(); // На всякий случай удаляем из базы
+                myPlayerRef = null;
+            }
+            
+            myId = null;
+            
+            // Показываем меню
+            document.getElementById('login-box').style.display = 'block';
+            
+            if (reason) {
+                alert(reason);
+            }
         }
 
         function startGame() {
@@ -191,15 +211,22 @@ canvas.width = window.innerWidth;
 
             myPlayerRef.onDisconnect().remove();
             gameActive = true;
+
+            // СЛУШАТЕЛЬ СМЕРТИ: Если нашу запись удалили из базы (нас съели), выкидываем в меню
+            myPlayerRef.on('value', (snapshot) => {
+                if (gameActive && !snapshot.exists()) {
+                    gameOver("Вас съели! Попробуйте еще раз.");
+                }
+            });
             
-            // Если еды нет, создаем
+            // Создание еды при первом запуске
             database.ref('food').once('value', (snapshot) => {
                 if (!snapshot.exists()) {
                     generateAllFood();
                 }
             });
 
-            // Если ботов нет, создаем
+            // Создание ботов при первом запуске
             database.ref('bots').once('value', (snapshot) => {
                 if (!snapshot.exists()) {
                     generateBots();
@@ -207,7 +234,6 @@ canvas.width = window.innerWidth;
             });
         }
 
-        // 2. УВЕЛИЧИЛИ КОЛИЧЕСТВО ЕДЫ ДО 150
         function generateAllFood() {
             let initialFood = {};
             for (let i = 0; i < 150; i++) {
@@ -220,12 +246,10 @@ canvas.width = window.innerWidth;
             database.ref('food').set(initialFood);
         }
 
-        // 3. ДОБАВЛЕНИЕ БОТОВ С РАЗНЫМИ РАЗМЕРАМИ
         function generateBots() {
             let initialBots = {};
             const botNames = ["Киборг", "Неон-Монстр", "Альфа", "Флеш", "Глюк", "Вектор", "Шериф", "Звезда"];
             for (let i = 0; i < 8; i++) {
-                // Случайный размер от 12 до 40
                 const bSize = Math.floor(Math.random() * 28) + 12;
                 initialBots['bot_' + i] = {
                     id: 'bot_' + i,
@@ -233,7 +257,7 @@ canvas.width = window.innerWidth;
                     x: Math.random() * (MAP_WIDTH - 100) + 50,
                     y: Math.random() * (MAP_HEIGHT - 100) + 50,
                     size: bSize,
-                    score: Math.floor((bSize - 15) * 2), // Очки зависят от размера
+                    score: Math.floor((bSize - 15) * 2),
                     color: `hsl(${Math.random() * 360}, 100%, 40%)`,
                     targetX: Math.random() * MAP_WIDTH,
                     targetY: Math.random() * MAP_HEIGHT
@@ -255,14 +279,15 @@ canvas.width = window.innerWidth;
             bots = snapshot.val() || {};
         });
 
-        // Движение ботов (Искусственный Интеллект) — выполняет только Хост!
+        // Движение ботов (ИИ)
         function updateBotsAI() {
             for (let botId in bots) {
                 let b = bots[botId];
                 
-                // Ищем ближайшую еду для бота
                 let nearestFood = null;
-                let minDist = Infinity;
+
+
+let minDist = Infinity;
                 for (let fId in food) {
                     let f = food[fId];
                     let d = Math.hypot(b.x - f.x, b.y - f.y);
@@ -272,7 +297,6 @@ canvas.width = window.innerWidth;
                     }
                 }
 
-                // Идем к еде, либо к случайной точке
                 let tx = nearestFood ? nearestFood.x : b.targetX;
                 let ty = nearestFood ? nearestFood.y : b.targetY;
 
@@ -280,9 +304,8 @@ canvas.width = window.innerWidth;
                 let dy = ty - b.y;
                 let dist = Math.hypot(dx, dy);
 
-
-if (dist > 5) {
-                    let speed = 2.5; // Боты ходят чуть медленнее игроков
+                if (dist > 5) {
+                    let speed = 2.5;
                     let newX = b.x + (dx / dist) * speed;
                     let newY = b.y + (dy / dist) * speed;
 
@@ -291,14 +314,12 @@ if (dist > 5) {
 
                     database.ref('bots/' + botId).update({ x: newX, y: newY });
                 } else if (!nearestFood) {
-                    // Если еды нет и пришли в точку, выбираем новую
                     database.ref('bots/' + botId).update({
                         targetX: Math.random() * MAP_WIDTH,
                         targetY: Math.random() * MAP_HEIGHT
                     });
                 }
 
-                // Проверяем: кушает ли бот еду
                 for (let fId in food) {
                     let f = food[fId];
                     let distToFood = Math.hypot(b.x - f.x, b.y - f.y);
@@ -357,7 +378,7 @@ if (dist > 5) {
                 }
             }
 
-            // Столкновение между Игроком и Ботами (игрок ест бота или бот ест игрока)
+            // Столкновение между Игроком и Ботами
             for (let botId in bots) {
                 let b = bots[botId];
                 let distToBot = Math.hypot(myPlayer.x - b.x, myPlayer.y - b.y);
@@ -368,7 +389,6 @@ if (dist > 5) {
                         let newScore = myPlayer.score + Math.floor((b.score || 0) / 2) + 5;
                         myPlayerRef.update({ score: newScore, size: 15 + Math.floor(newScore / 2) });
 
-                        // Возрождаем бота с новым случайным размером
                         const bSize = Math.floor(Math.random() * 25) + 12;
                         database.ref('bots/' + botId).update({
                             x: Math.random() * (MAP_WIDTH - 100) + 50,
@@ -377,7 +397,7 @@ if (dist > 5) {
                             score: Math.floor((bSize - 15) * 2)
                         });
                     } 
-                    // 2. БОТ СЪЕДАЕТ ИГРОКА
+                    // 2. БОТ СЪЕДАЕТ ИГРОКА (Удаляем игрока из БД -> сработает слушатель смерти)
                     else if (b.size > myPlayer.size * 1.15) {
                         let newBotScore = (b.score || 0) + Math.floor(myPlayer.score / 2) + 5;
                         database.ref('bots/' + botId).update({
@@ -385,13 +405,7 @@ if (dist > 5) {
                             size: 15 + Math.floor(newBotScore / 2)
                         });
 
-                        // Наш игрок сбрасывается и возрождается в новом месте
-                        myPlayerRef.update({
-                            x: Math.random() * (MAP_WIDTH - 100) + 50,
-                            y: Math.random() * (MAP_HEIGHT - 100) + 50,
-                            score: 0,
-                            size: 15
-                        });
+                        myPlayerRef.remove(); // Удаляем себя из базы
                     }
                 }
             }
@@ -406,17 +420,12 @@ if (dist > 5) {
                         let newScore = myPlayer.score + Math.floor(other.score / 2) + 5;
                         myPlayerRef.update({ score: newScore, size: 15 + Math.floor(newScore / 2) });
 
-                        database.ref('players/' + otherId).update({
-                            x: Math.random() * (MAP_WIDTH - 100) + 50,
-                            y: Math.random() * (MAP_HEIGHT - 100) + 50,
-                            score: 0,
-                            size: 15
-                        });
+                        // Удаляем съеденного игрока из БД (у него сработает меню)
+                        database.ref('players/' + otherId).remove();
                     }
                 }
             }
 
-            // Если я хост, я управляю ботами
             if (amIHost()) {
                 updateBotsAI();
             }
@@ -441,7 +450,7 @@ if (dist > 5) {
             ctx.save();
             ctx.translate(cameraX, cameraY);
 
-            // Рисуем сетку
+            // Сетка
             ctx.strokeStyle = '#111124';
             ctx.lineWidth = 1;
             for (let x = 0; x <= MAP_WIDTH; x += 40) {
@@ -451,12 +460,12 @@ if (dist > 5) {
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_WIDTH, y); ctx.stroke();
             }
 
-            // Граница арены
+            // Граница
             ctx.strokeStyle = '#ff0055';
             ctx.lineWidth = 6;
             ctx.strokeRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
 
-            // Рисуем еду
+            // Еда
             for (let foodId in food) {
                 let f = food[foodId];
                 ctx.shadowBlur = 8;
@@ -467,7 +476,7 @@ if (dist > 5) {
                 ctx.fill();
             }
 
-            // РИСУЕМ БОТОВ
+            // Боты
             for (let id in bots) {
                 let b = bots[id];
                 ctx.shadowBlur = 15;
@@ -482,7 +491,6 @@ if (dist > 5) {
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
-                // Имя бота (желтым цветом)
                 ctx.shadowBlur = 0;
                 ctx.fillStyle = '#ffeb3b';
                 ctx.font = 'italic bold 13px sans-serif';
@@ -490,7 +498,7 @@ if (dist > 5) {
                 ctx.fillText("[Бот] " + b.name, b.x, b.y - b.size - 8);
             }
 
-            // Рисуем реальных игроков
+            // Реальные игроки
             for (let id in players) {
                 let p = players[id];
                 ctx.shadowBlur = 15;
@@ -505,7 +513,6 @@ if (dist > 5) {
                 ctx.lineWidth = 2;
                 ctx.stroke();
 
-                // Имя
                 ctx.shadowBlur = 0;
                 ctx.fillStyle = '#ffffff';
                 ctx.font = 'bold 14px sans-serif';
@@ -519,12 +526,10 @@ if (dist > 5) {
             requestAnimationFrame(draw);
         }
 
-        // Общая таблица лидеров (Игроки + Боты)
         function updateLeaderboard() {
             const leaderList = document.getElementById('leader-list');
             if (!leaderList) return;
 
-            // Сливаем игроков и ботов в единый массив для сортировки
             let list = [
                 ...Object.values(players),
                 ...Object.values(bots).map(b => ({ ...b, name: "[Бот] " + b.name }))
